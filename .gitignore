@@ -24,3 +24,7 @@ Thumbs.db
 # Node (if anyone tries old install)
 node_modules/
 package-lock.json
+
+# Claude Code / Agents
+.claude/
+.agents/
