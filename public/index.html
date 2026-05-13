@@ -72,11 +72,11 @@ input, select { font: inherit; color: inherit; outline: none; }
 .add-task { display: flex; gap: 8px; margin-bottom: 28px; padding: 10px 12px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 4px 16px rgba(0,0,0,0.06); align-items: center; flex-wrap: wrap; }
 #addTaskSection.hidden { display: none; }
 .add-task input[type="text"] { flex: 1; min-width: 180px; border: none; padding: 10px 12px; background: transparent; font-size: 14px; font-weight: 500; color: var(--text); outline: none; }
-.add-task input[type="date"] { padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; font-size: 12px; cursor: pointer; transition: all 0.2s; color: var(--text); }
-.add-task input[type="date"]:hover { border-color: var(--accent); background: linear-gradient(135deg, #ffffff 0%, #f0f4ff 100%); }
+.add-task input[type="date"] { padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; font-size: 12px; cursor: pointer; transition: border-color 0.2s, background-color 0.2s; color: var(--text); }
+.add-task input[type="date"]:hover { border-color: var(--accent); background: #f0f4ff; }
 .add-task input::placeholder { color: #9ca3af; font-weight: 500; }
-.add-task select { padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; font-size: 12px; cursor: pointer; font-weight: 500; transition: all 0.2s; max-width: 140px; }
-.add-task select:hover { border-color: var(--accent); background: linear-gradient(135deg, #ffffff 0%, #f0f4ff 100%); }
+.add-task select { padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; font-size: 12px; cursor: pointer; font-weight: 500; transition: border-color 0.2s, background-color 0.2s; max-width: 140px; }
+.add-task select:hover { border-color: var(--accent); background: #f0f4ff; }
 .add-task button { padding: 10px 24px; background: linear-gradient(135deg, var(--accent) 0%, #7c7efb 100%); color: white; border-radius: 8px; font-weight: 600; font-size: 14px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); }
 .add-task button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4); }
 
@@ -117,6 +117,13 @@ input, select { font: inherit; color: inherit; outline: none; }
 .timeline-projects { display: flex; flex-direction: column; gap: 24px; }
 .timeline-project { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
 .timeline-project-header { padding: 16px 20px; background: linear-gradient(90deg, rgba(99, 102, 241, 0.05) 0%, transparent 100%); }
+.timeline-project-toggle { transition: all 0.2s; user-select: none; }
+.timeline-project-toggle:hover { background: linear-gradient(90deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0.02) 100%); }
+.timeline-chevron { font-size: 11px; color: var(--text-light); transition: transform 0.2s; flex-shrink: 0; padding: 0 4px; }
+.timeline-project-toggle.expanded .timeline-chevron { color: var(--accent); }
+.timeline-badge { padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; }
+.timeline-badge.overdue { background: linear-gradient(135deg, #fca5a5 0%, #ef4444 100%); color: white; }
+.timeline-badge.today { background: linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%); color: #78350f; }
 .timeline-tasks { padding: 16px 0; }
 .timeline-task { display: flex; align-items: center; gap: 16px; padding: 14px 20px; transition: all 0.2s; cursor: pointer; border-bottom: 1px solid #e5e7eb; }
 .timeline-task:hover { background: linear-gradient(135deg, #eef2ff 0%, #f0f4ff 100%); }
@@ -357,6 +364,7 @@ let newProjectColor = '#3b82f6';
 let currentTab = 'active';
 let expandedTaskId = null;
 let editingProjectId = null;
+let expandedTimelineProjects = new Set();
 
 const ICONS = [
   // Nature / Climate / Weather
@@ -389,7 +397,28 @@ const ICONS = [
   '👤', '👥', '🧑‍💼', '🧑‍🔬', '🧑‍🏫', '🏃', '🚴', '🧘', '☕',
   '🍴', '🏠', '🏢', '🚗', '✈️', '🎵', '🎨', '📷', '🎬', '⏰'
 ];
-const COLORS = ['#10b981', '#059669', '#065f46', '#34d399', '#6ee7b7', '#a7f3d0', '#d1fae5', '#ecfdf5', '#f59e0b', '#fbbf24', '#fcd34d', '#fef3c7', '#3b82f6', '#60a5fa', '#93c5fd', '#dbeafe', '#ef4444', '#fca5a5', '#fecaca', '#fee2e2', '#8b5cf6', '#a78bfa', '#c4b5fd', '#e9d5ff', '#f3e8ff'];
+const COLORS = [
+  // Greens
+  '#10b981', '#059669', '#065f46', '#34d399', '#6ee7b7', '#a7f3d0',
+  // Teals / Cyans
+  '#14b8a6', '#06b6d4', '#22d3ee', '#67e8f9',
+  // Blues
+  '#3b82f6', '#1d4ed8', '#60a5fa', '#93c5fd',
+  // Indigos
+  '#6366f1', '#4f46e5', '#a5b4fc',
+  // Purples
+  '#8b5cf6', '#7c3aed', '#a78bfa', '#c4b5fd',
+  // Pinks
+  '#ec4899', '#db2777', '#f472b6', '#fbcfe8',
+  // Roses / Reds
+  '#f43f5e', '#e11d48', '#ef4444', '#fca5a5',
+  // Oranges / Ambers
+  '#f97316', '#ea580c', '#f59e0b', '#fbbf24',
+  // Yellows / Limes
+  '#eab308', '#84cc16', '#bef264',
+  // Browns / Grays
+  '#92400e', '#78716c', '#475569', '#94a3b8'
+];
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
@@ -780,48 +809,69 @@ function renderTasks() {
         <div style="font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 12px; padding-left: 8px; border-left: 3px solid var(--accent);">📆 Week ${weekNum} • ${weekRange}</div>`;
 
       const projectsInWeek = byWeekProject[weekKey].tasks;
-      Object.keys(projectsInWeek).forEach(projId => {
+      // Order by sidebar order, then add "No Project" / unknown at the end
+      const orderedProjIds = state.projects.filter(p => projectsInWeek[p.id]).map(p => p.id);
+      Object.keys(projectsInWeek).forEach(pid => {
+        if (!orderedProjIds.includes(pid)) orderedProjIds.push(pid);
+      });
+
+      const todayStrLocal = todayStr();
+      orderedProjIds.forEach(projId => {
         const proj = state.projects.find(p => p.id === projId);
         const projName = proj ? proj.name : 'No Project';
         const projIcon = proj ? proj.icon : '📌';
         const projColor = proj ? proj.color : '#999';
         const tasks = projectsInWeek[projId].sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate));
+        const expandKey = `${weekKey}:${projId}`;
+        const isExpanded = expandedTimelineProjects.has(expandKey);
+
+        const overdueCount = tasks.filter(t => isPastDue(t.dueDate)).length;
+        const todayCount = tasks.filter(t => t.dueDate === todayStrLocal).length;
 
       html += `<div class="timeline-project">
-        <div class="timeline-project-header" style="border-left: 4px solid ${projColor};">
-          <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="timeline-project-header timeline-project-toggle ${isExpanded ? 'expanded' : ''}" data-expand-key="${expandKey}" style="border-left: 4px solid ${projColor}; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
             <span style="font-size: 20px;">${projIcon}</span>
-            <div>
+            <div style="flex: 1;">
               <div style="font-weight: 600; font-size: 15px;">${projName}</div>
-              <div style="font-size: 12px; color: var(--text-light);">${tasks.length} task${tasks.length !== 1 ? 's' : ''}</div>
+              <div style="font-size: 12px; color: var(--text-light); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px;">
+                <span>${tasks.length} task${tasks.length !== 1 ? 's' : ''}</span>
+                ${overdueCount > 0 ? `<span class="timeline-badge overdue">⚠️ ${overdueCount} overdue</span>` : ''}
+                ${todayCount > 0 ? `<span class="timeline-badge today">⚡ ${todayCount} today</span>` : ''}
+              </div>
             </div>
+            <span class="timeline-chevron">${isExpanded ? '▼' : '▶'}</span>
           </div>
-        </div>
-        <div class="timeline-tasks">`;
-
-      tasks.forEach(t => {
-        const d = new Date(t.dueDate + 'T00:00');
-        const day = d.getDate();
-        const subtaskCount = t.subtasks ? t.subtasks.length : 0;
-        const subtaskDone = t.subtasks ? t.subtasks.filter(s => s.done).length : 0;
-        const isToday = day === today.getDate();
-        const priorityColor = t.priority === 'high' ? '#ef4444' : (t.priority === 'medium' ? '#f59e0b' : projColor);
-        const priorityBg = t.priority === 'high' ? '#fff5f5' : (t.priority === 'medium' ? '#fffbf0' : '#f9fafb');
-
-        html += `<div class="timeline-task" data-id="${t.id}" style="border-left: 4px solid ${priorityColor}; background: ${priorityBg};">
-          <div class="timeline-task-day" style="background: ${priorityColor}; font-size: 12px;">
-            <span>${day}</span>
-          </div>
-          <div class="timeline-task-content">
-            <div style="font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 6px;">${t.priority !== 'normal' ? `<span style="font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: ${priorityColor}; color: white;">${t.priority.toUpperCase()}</span>` : ''} ${t.title}</div>
-            ${subtaskCount > 0 ? `<div style="font-size: 12px; color: var(--text-light); margin-top: 4px; font-weight: 500;">✓ ${subtaskDone}/${subtaskCount}</div>` : ''}
-          </div>
-          ${isToday ? '<div style="font-size: 10px; background: var(--accent); color: white; padding: 2px 6px; border-radius: 3px; font-weight: 600;">Today</div>' : ''}
         </div>`;
+
+      if (isExpanded) {
+        html += `<div class="timeline-tasks">`;
+        tasks.forEach(t => {
+          const d = new Date(t.dueDate + 'T00:00');
+          const day = d.getDate();
+          const subtaskCount = t.subtasks ? t.subtasks.length : 0;
+          const subtaskDone = t.subtasks ? t.subtasks.filter(s => s.done).length : 0;
+          const isToday = day === today.getDate();
+          const priorityColor = t.priority === 'high' ? '#ef4444' : (t.priority === 'medium' ? '#f59e0b' : '#10b981');
+          const priorityBg = t.priority === 'high' ? '#fff5f5' : (t.priority === 'medium' ? '#fffbf0' : '#f0fdf4');
+
+          html += `<div class="timeline-task" data-id="${t.id}" style="border-left: 4px solid ${priorityColor}; background: ${priorityBg};">
+            <div class="timeline-task-day" style="background: ${priorityColor}; font-size: 12px;">
+              <span>${day}</span>
+            </div>
+            <div class="timeline-task-content">
+              <div style="font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 6px;">${t.priority !== 'normal' ? `<span style="font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: ${priorityColor}; color: white;">${t.priority.toUpperCase()}</span>` : ''} ${t.title}</div>
+              ${subtaskCount > 0 ? `<div style="font-size: 12px; color: var(--text-light); margin-top: 4px; font-weight: 500;">✓ ${subtaskDone}/${subtaskCount}</div>` : ''}
+            </div>
+            ${isToday ? '<div style="font-size: 10px; background: var(--accent); color: white; padding: 2px 6px; border-radius: 3px; font-weight: 600;">Today</div>' : ''}
+          </div>`;
+        });
+        html += `</div>`;
+      }
+
+        html += '</div>';
       });
 
-        html += '</div></div>';
-      });
       html += '</div>';
     });
     html += '</div></div>';
@@ -898,6 +948,17 @@ function renderTasks() {
     container.querySelectorAll('.timeline-task').forEach(item => {
       item.addEventListener('click', () => {
         openTaskModal(item.dataset.id);
+      });
+    });
+    container.querySelectorAll('.timeline-project-toggle').forEach(header => {
+      header.addEventListener('click', () => {
+        const key = header.dataset.expandKey;
+        if (expandedTimelineProjects.has(key)) {
+          expandedTimelineProjects.delete(key);
+        } else {
+          expandedTimelineProjects.add(key);
+        }
+        render();
       });
     });
   }
