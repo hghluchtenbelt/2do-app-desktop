@@ -1,6 +1,6 @@
 # 2Do List — Desktop Edition
 
-A lightweight, elegant to-do list app for Windows with local file-based data storage, project organization, weekly timeline, productivity stats, and full offline functionality.
+A lightweight to-do list app for Windows with local file-based data storage, project organization, weekly timeline and stats
 
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-green)
