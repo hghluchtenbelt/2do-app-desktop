@@ -1,6 +1,6 @@
-# 2Do List — Desktop Edition
+# 2Do-list for Windows desktop 
 
-A lightweight, elegant to-do list app for Windows with local file-based data storage, project organization, weekly timeline, productivity stats, and full offline functionality.
+A lightweight to-do list app for Windows with local file-based data storage, project organization, weekly timeline and stats
 
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-green)
@@ -28,7 +28,7 @@ A lightweight, elegant to-do list app for Windows with local file-based data sto
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/2do-app-desktop.git
+git clone https://github.com/hghluchtenbelt/2do-app-desktop.git
 cd 2do-app-desktop
 
 # Install dependencies
