@@ -92,6 +92,10 @@ input, select { font: inherit; color: inherit; outline: none; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
 .task-row { display: flex; align-items: flex-start; gap: 12px; }
+.task-section-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; margin: 24px 0 10px 0; font-size: 13px; font-weight: 700; color: var(--text); background: linear-gradient(90deg, rgba(99, 102, 241, 0.04) 0%, transparent 100%); border-radius: 6px; letter-spacing: -0.2px; }
+.task-section-header:first-child { margin-top: 0; }
+.task-section-count { font-size: 11px; font-weight: 600; color: var(--text-light); background: rgba(0,0,0,0.06); padding: 2px 8px; border-radius: 10px; }
+
 .task-delete-btn { background: none; border: none; cursor: pointer; font-size: 14px; color: #dc2626; padding: 4px 8px; opacity: 0; transition: opacity 0.2s, color 0.2s; font-weight: 700; flex-shrink: 0; border-radius: 4px; }
 .task-item:hover .task-delete-btn { opacity: 0.7; }
 .task-delete-btn:hover { opacity: 1 !important; color: #ef4444; background: #fee2e2; }
@@ -905,24 +909,14 @@ function renderTasks() {
     });
     html += '</div></div>';
   } else {
-    todos.sort((a, b) => {
-      const aOverdue = isPastDue(a.dueDate), bOverdue = isPastDue(b.dueDate);
-      if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
-      const aSoon = isDueSoon(a.dueDate), bSoon = isDueSoon(b.dueDate);
-      if (aSoon !== bSoon) return aSoon ? -1 : 1;
-      const prio = { high: 0, medium: 1, normal: 2 };
-      const aPrio = prio[a.priority] ?? 2, bPrio = prio[b.priority] ?? 2;
-      if (aPrio !== bPrio) return aPrio - bPrio;
-      return (a.dueDate || '9999') < (b.dueDate || '9999') ? -1 : 1;
-    }).forEach(t => {
+    const renderTaskHtml = (t) => {
       const proj = state.projects.find(p => p.id === t.projectId);
       const dueText = t.dueDate ? new Date(t.dueDate + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
       const prioClass = t.priority === 'high' ? 'priority-high' : (t.priority === 'medium' ? 'priority-medium' : '');
       const completedClass = t.completed ? 'task-completed' : '';
       const isUrgent = isDueSoon(t.dueDate);
       const isOverdue = isPastDue(t.dueDate);
-
-      html += `<div class="task-item ${prioClass} ${completedClass} ${isUrgent ? 'urgent' : ''} ${isOverdue ? 'overdue' : ''}" data-id="${t.id}">
+      return `<div class="task-item ${prioClass} ${completedClass} ${isUrgent ? 'urgent' : ''} ${isOverdue ? 'overdue' : ''}" data-id="${t.id}">
         <div class="task-row">
           <div class="checkbox ${t.completed ? 'checked' : ''}" data-action="toggle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>
@@ -940,7 +934,56 @@ function renderTasks() {
           ${currentTab === 'archive' ? `<button class="task-delete-btn" data-delete-id="${t.id}" title="Delete task">✕</button>` : ''}
         </div>
       </div>`;
-    });
+    };
+
+    if (currentTab === 'archive') {
+      // Archive: simple sorted list
+      todos.sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || '')).forEach(t => { html += renderTaskHtml(t); });
+    } else {
+      // Active: grouped by date buckets
+      const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+      const tomorrowStr = shiftDate(1);
+      const dayOfWeek = todayDate.getDay(); // 0=Sun, 1=Mon...
+      const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+      const endOfWeekStr = shiftDate(daysUntilSunday);
+      const todayStrVal = todayStr();
+
+      const buckets = { overdue: [], today: [], tomorrow: [], thisWeek: [], later: [], noDate: [] };
+      todos.forEach(t => {
+        if (!t.dueDate) { buckets.noDate.push(t); return; }
+        if (isPastDue(t.dueDate)) { buckets.overdue.push(t); return; }
+        if (t.dueDate === todayStrVal) { buckets.today.push(t); return; }
+        if (t.dueDate === tomorrowStr) { buckets.tomorrow.push(t); return; }
+        if (t.dueDate <= endOfWeekStr) { buckets.thisWeek.push(t); return; }
+        buckets.later.push(t);
+      });
+
+      const sortByPrio = (a, b) => {
+        const prio = { high: 0, medium: 1, normal: 2 };
+        const aPrio = prio[a.priority] ?? 2, bPrio = prio[b.priority] ?? 2;
+        if (aPrio !== bPrio) return aPrio - bPrio;
+        return (a.dueDate || '9999') < (b.dueDate || '9999') ? -1 : 1;
+      };
+      Object.values(buckets).forEach(arr => arr.sort(sortByPrio));
+
+      const sections = [
+        { key: 'overdue',  label: '⚠️ Overdue',   tasks: buckets.overdue,  color: '#dc2626' },
+        { key: 'today',    label: '⚡ Today',     tasks: buckets.today,    color: '#f59e0b' },
+        { key: 'tomorrow', label: '☀️ Tomorrow',  tasks: buckets.tomorrow, color: '#10b981' },
+        { key: 'thisWeek', label: '📆 This Week', tasks: buckets.thisWeek, color: '#3b82f6' },
+        { key: 'later',    label: '📅 Later',     tasks: buckets.later,    color: '#8b5cf6' },
+        { key: 'noDate',   label: '🗒️ No Date',  tasks: buckets.noDate,   color: '#9ca3af' }
+      ];
+
+      sections.forEach(sec => {
+        if (sec.tasks.length === 0) return;
+        html += `<div class="task-section-header" style="border-left: 3px solid ${sec.color};">
+          <span>${sec.label}</span>
+          <span class="task-section-count">${sec.tasks.length}</span>
+        </div>`;
+        sec.tasks.forEach(t => { html += renderTaskHtml(t); });
+      });
+    }
   }
 
   container.innerHTML = html;
