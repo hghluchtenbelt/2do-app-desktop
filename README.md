@@ -84,13 +84,6 @@ The file uses atomic writes (temp file + rename) to prevent corruption. Back up 
 └── README.md
 ```
 
-## Customization
-
-- **Default projects** — Edit `getDefaultProjects()` in `public/index.html`
-- **App icon** — Replace `public/icon.ico` or run `python make_icon.py`
-- **Window size** — Edit `window.setGeometry(...)` in `app.py`
-- **Server port** — Change `PORT = 1000` in `app.py`
-
 ## License
 
 MIT — Use freely, modify, and distribute.
