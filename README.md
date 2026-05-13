@@ -1,4 +1,4 @@
-# 2Do List — Desktop Edition
+# 2Do-list for Windows desktop 
 
 A lightweight to-do list app for Windows with local file-based data storage, project organization, weekly timeline and stats
 
