@@ -32,7 +32,7 @@ git clone https://github.com/<your-username>/2do-app-desktop.git
 cd 2do-app-desktop
 
 # Install dependencies
-pip install PyQt6 PyQt6-WebEngine Pillow pyinstaller
+pip install -r requirements.txt
 
 # Run the app
 python app.py
