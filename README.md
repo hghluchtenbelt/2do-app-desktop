@@ -28,7 +28,7 @@ A lightweight to-do list app for Windows with local file-based data storage, pro
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/2do-app-desktop.git
+git clone https://github.com/hghluchtenbelt/2do-app-desktop.git
 cd 2do-app-desktop
 
 # Install dependencies
