@@ -380,6 +380,7 @@ let newProjectColor = '#3b82f6';
 let currentTab = 'active';
 let expandedTaskId = null;
 let editingProjectId = null;
+let editingPriority = null;
 let expandedTimelineProjects = new Set();
 
 const ICONS = [
@@ -467,6 +468,30 @@ function isPastDue(dueDate) {
 }
 function shiftDate(days) { const d = new Date(); d.setDate(d.getDate() + days); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, c => HTML_ESCAPES[c]);
+}
+
+// ISO-8601 week: weeks start Monday, week 1 contains the year's first Thursday.
+// Returns { year, week } where year is the ISO week-numbering year.
+function isoWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7; // Mon=1..Sun=7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum); // shift to the week's Thursday
+  const isoYear = d.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return { year: isoYear, week };
+}
+// Monday (local time) of the ISO week containing `date`.
+function isoWeekMonday(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayNum = d.getDay() || 7; // Mon=1..Sun=7
+  d.setDate(d.getDate() - dayNum + 1);
+  return d;
+}
+
 async function loadData() {
   try {
     const res = await fetch('/api/load-data');
@@ -538,7 +563,7 @@ function renderProjects() {
     html += `<div class="project-item ${selectedProjectId === p.id ? 'active' : ''}" data-id="${p.id}" data-proj-id="${p.id}" draggable="true">
       <span class="proj-drag-handle" title="Drag to reorder">⋮⋮</span>
       <span class="project-dot" style="background:${p.color};"></span>
-      <span class="project-label">${p.icon} ${p.name}</span>
+      <span class="project-label">${p.icon} ${escapeHtml(p.name)}</span>
       <span class="project-count">${count}</span>
       <button class="project-edit" data-edit-proj-id="${p.id}" title="Edit project">✎</button>
       <button class="project-delete" data-proj-id="${p.id}" title="Delete project">✕</button>
@@ -627,7 +652,7 @@ function updateProjectSelect() {
   const taskSel = document.getElementById('taskProject');
   let html = '<option value="">No project</option>';
   state.projects.filter(p => !p.archived).forEach(p => {
-    html += `<option value="${p.id}">${p.icon} ${p.name}</option>`;
+    html += `<option value="${p.id}">${p.icon} ${escapeHtml(p.name)}</option>`;
   });
   sel.innerHTML = html;
   if (taskSel) taskSel.innerHTML = html;
@@ -760,7 +785,7 @@ function renderStats() {
 
   Object.keys(byProject).sort((a, b) => byProject[b].count - byProject[a].count).forEach(pid => {
     const proj = state.projects.find(p => p.id === pid);
-    const name = proj ? `${proj.icon} ${proj.name}` : '📌 No Project';
+    const name = proj ? `${proj.icon} ${escapeHtml(proj.name)}` : '📌 No Project';
     const color = proj ? proj.color : '#999';
     const data = byProject[pid];
     html += `<div class="stats-project-row">
@@ -811,18 +836,13 @@ function renderTasks() {
     html = '<div class="timeline-view">';
 
     const today = new Date();
-    const getWeekNumber = (d) => {
-      const firstDay = new Date(d.getFullYear(), 0, 1);
-      const pastDaysOfYear = (d - firstDay) / 86400000;
-      return Math.ceil((pastDaysOfYear + firstDay.getDay() + 1) / 7);
-    };
 
-    // Group todos by week, then by project
+    // Group todos by ISO week, then by project
     const byWeekProject = {};
     todos.forEach(t => {
       const d = new Date(t.dueDate + 'T00:00');
-      const weekNum = getWeekNumber(d);
-      const weekKey = `${d.getFullYear()}-W${weekNum}`;
+      const { year, week } = isoWeek(d);
+      const weekKey = `${year}-W${String(week).padStart(2, '0')}`;
       const pid = t.projectId || 'none';
       if (!byWeekProject[weekKey]) byWeekProject[weekKey] = { date: d, tasks: {} };
       if (!byWeekProject[weekKey].tasks[pid]) byWeekProject[weekKey].tasks[pid] = [];
@@ -832,10 +852,8 @@ function renderTasks() {
     html += '<div class="timeline-projects">';
     Object.keys(byWeekProject).sort().forEach(weekKey => {
       const weekData = byWeekProject[weekKey];
-      const d = weekData.date;
-      const weekNum = getWeekNumber(d);
-      const weekStart = new Date(d);
-      weekStart.setDate(d.getDate() - d.getDay() + 1);
+      const weekNum = parseInt(weekKey.slice(-2), 10);
+      const weekStart = isoWeekMonday(weekData.date);
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 6);
       const weekRange = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
@@ -868,7 +886,7 @@ function renderTasks() {
           <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
             <span style="font-size: 20px;">${projIcon}</span>
             <div style="flex: 1;">
-              <div style="font-weight: 600; font-size: 15px;">${projName}</div>
+              <div style="font-weight: 600; font-size: 15px;">${escapeHtml(projName)}</div>
               <div style="font-size: 12px; color: var(--text-light); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px;">
                 <span>${tasks.length} task${tasks.length !== 1 ? 's' : ''}</span>
                 ${overdueCount > 0 ? `<span class="timeline-badge overdue">⚠️ ${overdueCount} overdue</span>` : ''}
@@ -886,7 +904,7 @@ function renderTasks() {
           const day = d.getDate();
           const subtaskCount = t.subtasks ? t.subtasks.length : 0;
           const subtaskDone = t.subtasks ? t.subtasks.filter(s => s.done).length : 0;
-          const isToday = day === today.getDate();
+          const isToday = t.dueDate === todayStr();
           const priorityColor = t.priority === 'high' ? '#ef4444' : (t.priority === 'medium' ? '#f59e0b' : '#10b981');
           const priorityBg = t.priority === 'high' ? '#fff5f5' : (t.priority === 'medium' ? '#fffbf0' : '#f0fdf4');
 
@@ -898,7 +916,7 @@ function renderTasks() {
               <span>${day}</span>
             </div>
             <div class="timeline-task-content">
-              <div style="font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 6px;">${t.priority !== 'normal' ? `<span style="font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: ${priorityColor}; color: white;">${t.priority.toUpperCase()}</span>` : ''} ${t.title}</div>
+              <div style="font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 6px;">${t.priority !== 'normal' ? `<span style="font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: ${priorityColor}; color: white;">${t.priority.toUpperCase()}</span>` : ''} ${escapeHtml(t.title)}</div>
               ${subtaskCount > 0 ? `<div style="font-size: 12px; color: var(--text-light); margin-top: 4px; font-weight: 500;">✓ ${subtaskDone}/${subtaskCount}</div>` : ''}
             </div>
             ${isToday ? '<div style="font-size: 10px; background: var(--accent); color: white; padding: 2px 6px; border-radius: 3px; font-weight: 600;">Today</div>' : ''}
@@ -927,9 +945,9 @@ function renderTasks() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
           <div class="task-content">
-            <div class="task-title">${isOverdue ? '⚠️ ' : (isUrgent ? '⏰ ' : '')}${t.title}</div>
+            <div class="task-title">${isOverdue ? '⚠️ ' : (isUrgent ? '⏰ ' : '')}${escapeHtml(t.title)}</div>
             <div class="task-meta">
-              ${proj ? `<span class="badge project">${proj.icon} ${proj.name}</span>` : ''}
+              ${proj ? `<span class="badge project">${proj.icon} ${escapeHtml(proj.name)}</span>` : ''}
               ${isOverdue ? '<span class="badge urgent-badge">OVERDUE</span>' : (isUrgent ? '<span class="badge urgent-badge urgent-soon">SOON</span>' : '')}
               ${t.priority !== 'normal' ? `<span class="badge">${t.priority}</span>` : ''}
               ${t.dueDate ? `<span class="badge">${dueText}</span>` : ''}
@@ -1009,12 +1027,12 @@ function renderTasks() {
           const timeSpent = prompt('How long did this task take? (in minutes, optional)', '');
           t.completed = true;
           t.completedAt = new Date().toISOString();
-          if (timeSpent && !isNaN(timeSpent)) t.timeSpent = parseInt(timeSpent);
+          const mins = parseInt(timeSpent, 10);
+          if (Number.isFinite(mins) && mins > 0 && mins < 1440) t.timeSpent = mins;
           justCompleted = true;
         } else {
           t.completed = false;
           delete t.completedAt;
-          delete t.timeSpent;
         }
         saveData();
         render();
@@ -1063,7 +1081,8 @@ function renderTasks() {
         const timeSpent = prompt('How long did this task take? (in minutes, optional)', '');
         t.completed = true;
         t.completedAt = new Date().toISOString();
-        if (timeSpent && !isNaN(timeSpent)) t.timeSpent = parseInt(timeSpent);
+        const mins = parseInt(timeSpent, 10);
+        if (Number.isFinite(mins) && mins > 0 && mins < 1440) t.timeSpent = mins;
         saveData();
         render();
         fireConfetti();
@@ -1295,12 +1314,13 @@ function openTaskModal(taskId) {
   if (!task) return;
 
   expandedTaskId = taskId;
+  editingPriority = task.priority || 'normal';
   document.getElementById('taskTitle').value = task.title;
   document.getElementById('taskNotes').value = task.notes || '';
   document.getElementById('taskDateEdit').value = task.dueDate || '';
 
   document.querySelectorAll('.priority-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.priority === task.priority);
+    btn.classList.toggle('active', btn.dataset.priority === editingPriority);
   });
 
   renderSubtasks();
@@ -1327,7 +1347,7 @@ function renderSubtasks() {
       <div class="subtask-check ${sub.done ? 'checked' : ''}" data-subtask="${idx}">
         ${sub.done ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
       </div>
-      <span class="subtask-text">${sub.text}</span>
+      <span class="subtask-text">${escapeHtml(sub.text)}</span>
       <button class="subtask-remove" data-remove-subtask="${idx}" title="Remove">×</button>
     </div>`;
   });
@@ -1368,8 +1388,8 @@ function renderLinks() {
   task.links.forEach((link, idx) => {
     html += `<div style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center; padding: 8px; background: #f9f9f9; border-radius: 6px;">
       <span style="flex: 1;">
-        <strong>${link.label || 'Link'}</strong><br>
-        <small style="color: #666;">${link.url}</small>
+        <strong>${escapeHtml(link.label || 'Link')}</strong><br>
+        <small style="color: #666;">${escapeHtml(link.url)}</small>
       </span>
       <button data-remove-link="${idx}" style="color: #dc2626; cursor: pointer; font-weight: 600;">×</button>
     </div>`;
@@ -1420,13 +1440,12 @@ document.getElementById('addLinkBtn').addEventListener('click', () => {
 
 document.querySelectorAll('.priority-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    const task = state.todos.find(t => t.id === expandedTaskId);
-    if (task) task.priority = btn.dataset.priority;
+    // Stage the choice; it is applied when the task is saved (B9)
+    editingPriority = btn.dataset.priority;
     document.querySelectorAll('.priority-btn').forEach(b => {
       b.classList.remove('active');
     });
     btn.classList.add('active');
-    saveData();
   });
 });
 
@@ -1434,10 +1453,14 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const task = state.todos.find(t => t.id === expandedTaskId);
   if (!task) return;
 
-  task.title = document.getElementById('taskTitle').value.trim();
+  const newTitle = document.getElementById('taskTitle').value.trim();
+  if (!newTitle) { showToast('Task title cannot be empty', 'warning'); return; }
+
+  task.title = newTitle;
   task.notes = document.getElementById('taskNotes').value.trim();
   task.dueDate = document.getElementById('taskDateEdit').value || null;
   task.projectId = document.getElementById('taskProject').value || null;
+  task.priority = editingPriority || 'normal';
 
   saveData();
   document.getElementById('taskModal').classList.remove('open');

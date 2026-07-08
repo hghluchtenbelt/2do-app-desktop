@@ -3,6 +3,7 @@
 Reviewed: 2026-07-08, commit `1a67907`. Scope: `app.py`, `public/index.html`, `app.spec`, `make_icon.py`.
 
 **Progress:** Slice 0 (B1, B10, B4, B5) done on branch `slice-0-data-safety`.
+Slice 1 (B2, B6, B7, B8, B9, B11, B12, B13) done on branch `slice-1-correctness`.
 
 Severity: **Critical** (data loss or broken core flow), **High** (wrong behavior users will hit), **Medium** (wrong in edge cases), **Low** (polish, hardening).
 
@@ -14,7 +15,7 @@ Severity: **Critical** (data loss or broken core flow), **High** (wrong behavior
 `index.html:1004-1014` and `1056-1062`. `fireConfetti()` runs before `saveData()`. Confetti comes from a CDN (`index.html:7`), so offline `confetti` is undefined, `fireConfetti()` throws a ReferenceError, and the `saveData()` + `render()` after it never run. The task looks unchanged, and the in-memory completion is lost on close. This is a desktop app that should work offline.
 Fix: vendor `confetti.browser.min.js` into `public/`, wrap the call in `if (typeof confetti === 'function')`, and always call `saveData()` before any cosmetic effect.
 
-### B2. High: user text is injected into innerHTML unescaped
+### B2. High: user text is injected into innerHTML unescaped [DONE, slice 1]
 Task titles (`index.html:896, 925`), project names (`536, 625, 866`), subtask text (`1322`), link labels and urls (`1363-1364`), and stats project names (`763`) are interpolated into template strings without escaping. A title containing `<` breaks rendering; `<img src=x onerror=...>` executes script inside the app. Local-only, so low exploitability, but it corrupts display with ordinary input like `a < b`.
 Fix: add one `escapeHtml()` helper and use it at every interpolation of user-entered text.
 
@@ -30,19 +31,19 @@ Fix: on parse failure, rename the file to `todos.json.corrupt-<timestamp>` befor
 `app.py:45-47`. Validation only checks `isinstance(payload, dict)`. A payload like `{"a": 1}` is written verbatim and wipes all tasks on next load.
 Fix: require `todos` and `projects` keys, both lists, before writing.
 
-### B6. Medium: timeline weeks 10+ sort before week 2
+### B6. Medium: timeline weeks 10+ sort before week 2 [DONE, slice 1]
 `index.html:820, 828`. Week keys are `"2026-W9"`, `"2026-W10"` and sorted lexicographically, so W10-W19 sort between W1 and W2.
 Fix: zero-pad (`W09`) or sort numerically.
 
-### B7. Medium: timeline "Today" badge only compares day of month
+### B7. Medium: timeline "Today" badge only compares day of month [DONE, slice 1]
 `index.html:884`. `day === today.getDate()` marks a task due Aug 8 as "Today" on Jul 8.
 Fix: compare `t.dueDate === todayStr()`.
 
-### B8. Medium: week number and week range are inconsistent and non-ISO
+### B8. Medium: week number and week range are inconsistent and non-ISO [DONE, slice 1]
 `index.html:809-813` computes a rough Jan-1-based week number; `832-836` builds a Monday-based range. For Sunday due dates, `d.getDate() - d.getDay() + 1` lands on the *next* Monday, so the displayed range doesn't contain the task's date. Year boundaries misgroup too.
 Fix: one proper ISO-week helper used for both the key and the range.
 
-### B9. Medium: priority edits in the task modal bypass Cancel
+### B9. Medium: priority edits in the task modal bypass Cancel [DONE, slice 1]
 `index.html:1413-1423`. Clicking a priority button mutates the task and saves immediately, while title, notes, date, and project only apply on Save. Closing with ✕ keeps the priority change, which reads as a bug.
 Fix: stage the priority in a variable and apply it in the Save handler.
 
@@ -50,15 +51,15 @@ Fix: stage the priority in a variable and apply it in the Save handler.
 `index.html:515-517`. A failed POST only logs to console; the user keeps working and loses everything on close.
 Fix: `showToast('Could not save', 'error')` in the catch, ideally with a retry.
 
-### B11. Low: time-spent prompt accepts garbage
+### B11. Low: time-spent prompt accepts garbage [DONE, slice 1]
 `index.html:1003-1006, 1056-1059`. `"-30"` or `"1e99"` pass `!isNaN`, storing negative or absurd minutes that skew stats.
 Fix: `const m = parseInt(v, 10); if (Number.isFinite(m) && m > 0 && m < 1440) ...`
 
-### B12. Low: unchecking a task discards its logged time
+### B12. Low: unchecking a task discards its logged time [DONE, slice 1]
 `index.html:1009-1011`. Un-completing deletes `completedAt` and `timeSpent`, so an accidental uncheck+recheck forces re-entering the time.
 Fix: keep `timeSpent`, only clear `completedAt`.
 
-### B13. Low: task can be saved with an empty title
+### B13. Low: task can be saved with an empty title [DONE, slice 1]
 `index.html:1429`. The edit modal trims but doesn't validate, producing invisible tasks.
 Fix: reject empty with a toast, like the project modal does.
 
@@ -118,7 +119,7 @@ Each slice is one small PR/commit, verified by running `python app.py` and exerc
 **Slice 0, data safety (do first): B1, B10, B4, B5. [DONE]**
 Vendor confetti locally, reorder save-before-effects, toast on save failure, corrupt-file quarantine, payload validation. Small diffs, removes all silent data loss paths.
 
-**Slice 1, correctness: B2, B6, B7, B8, B9, B11, B12, B13.**
+**Slice 1, correctness: B2, B6, B7, B8, B9, B11, B12, B13. [DONE]**
 Escaping helper, ISO week fix, today-badge fix, modal consistency, input validation.
 
 **Slice 2, robustness: B3, B16, B17, B18, B19.**
