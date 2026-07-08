@@ -2,13 +2,15 @@
 
 Reviewed: 2026-07-08, commit `1a67907`. Scope: `app.py`, `public/index.html`, `app.spec`, `make_icon.py`.
 
+**Progress:** Slice 0 (B1, B10, B4, B5) done on branch `slice-0-data-safety`.
+
 Severity: **Critical** (data loss or broken core flow), **High** (wrong behavior users will hit), **Medium** (wrong in edge cases), **Low** (polish, hardening).
 
 ---
 
 ## 1. Bugs (fix)
 
-### B1. Critical: completing a task offline is never saved
+### B1. Critical: completing a task offline is never saved [DONE, slice 0]
 `index.html:1004-1014` and `1056-1062`. `fireConfetti()` runs before `saveData()`. Confetti comes from a CDN (`index.html:7`), so offline `confetti` is undefined, `fireConfetti()` throws a ReferenceError, and the `saveData()` + `render()` after it never run. The task looks unchanged, and the in-memory completion is lost on close. This is a desktop app that should work offline.
 Fix: vendor `confetti.browser.min.js` into `public/`, wrap the call in `if (typeof confetti === 'function')`, and always call `saveData()` before any cosmetic effect.
 
@@ -20,11 +22,11 @@ Fix: add one `escapeHtml()` helper and use it at every interpolation of user-ent
 `app.py:5, 71-75`. The port is fixed at 1000 and the bind error from a second instance dies inside the daemon thread unnoticed. The second window then loads the first instance's server. Two windows now each POST the whole state, so the last saver wins and the other window's edits are silently destroyed. Closing the first instance leaves the second window with a dead backend.
 Fix: detect the failed bind and either focus/exit with a message ("already running"), or pick a free port (`port=0`, read the assigned port, pass it to `QUrl`).
 
-### B4. Medium: a corrupt data file gets overwritten by the next save
+### B4. Medium: a corrupt data file gets overwritten by the next save [DONE, slice 0]
 `app.py:28-33`. If `todos.json` is corrupt, load-data returns empty state. The client then treats empty as truth and the first save overwrites the corrupt file, destroying data that was likely recoverable (e.g. truncated JSON).
 Fix: on parse failure, rename the file to `todos.json.corrupt-<timestamp>` before returning empty, and tell the client so it can show a warning.
 
-### B5. Medium: save endpoint accepts any dict
+### B5. Medium: save endpoint accepts any dict [DONE, slice 0]
 `app.py:45-47`. Validation only checks `isinstance(payload, dict)`. A payload like `{"a": 1}` is written verbatim and wipes all tasks on next load.
 Fix: require `todos` and `projects` keys, both lists, before writing.
 
@@ -44,7 +46,7 @@ Fix: one proper ISO-week helper used for both the key and the range.
 `index.html:1413-1423`. Clicking a priority button mutates the task and saves immediately, while title, notes, date, and project only apply on Save. Closing with ✕ keeps the priority change, which reads as a bug.
 Fix: stage the priority in a variable and apply it in the Save handler.
 
-### B10. Low: failed saves are invisible to the user
+### B10. Low: failed saves are invisible to the user [DONE, slice 0]
 `index.html:515-517`. A failed POST only logs to console; the user keeps working and loses everything on close.
 Fix: `showToast('Could not save', 'error')` in the catch, ideally with a retry.
 
@@ -113,7 +115,7 @@ Fix: reject requests whose `Origin`/`Host` isn't `localhost:1000`, or require a 
 
 Each slice is one small PR/commit, verified by running `python app.py` and exercising the flow.
 
-**Slice 0, data safety (do first): B1, B10, B4, B5.**
+**Slice 0, data safety (do first): B1, B10, B4, B5. [DONE]**
 Vendor confetti locally, reorder save-before-effects, toast on save failure, corrupt-file quarantine, payload validation. Small diffs, removes all silent data loss paths.
 
 **Slice 1, correctness: B2, B6, B7, B8, B9, B11, B12, B13.**

@@ -27,10 +27,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
             except Exception as e:
                 print(f"Load error: {e}", file=sys.stderr)
+                # Quarantine the unreadable file so the next save doesn't overwrite
+                # data that may still be recoverable (e.g. a truncated write).
+                data_error = False
+                try:
+                    if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
+                        backup = DATA_FILE + '.corrupt-' + time.strftime('%Y%m%d-%H%M%S')
+                        os.replace(DATA_FILE, backup)
+                        print(f"Quarantined unreadable data file to {backup}", file=sys.stderr)
+                        data_error = True
+                except Exception as be:
+                    print(f"Quarantine error: {be}", file=sys.stderr)
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(b'{"todos":[],"projects":[]}')
+                fallback = {'todos': [], 'projects': [], '_dataError': data_error}
+                self.wfile.write(json.dumps(fallback).encode('utf-8'))
             return
         super().do_GET()
 
@@ -45,6 +57,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 payload = json.loads(body.decode())
                 if not isinstance(payload, dict):
                     raise ValueError("Invalid format")
+                # Require the expected shape so a malformed payload can't wipe tasks
+                if not isinstance(payload.get('todos'), list) or not isinstance(payload.get('projects'), list):
+                    raise ValueError("Payload must contain 'todos' and 'projects' lists")
 
                 os.makedirs(DATA_DIR, exist_ok=True)
                 # Atomic write: write to temp file then rename

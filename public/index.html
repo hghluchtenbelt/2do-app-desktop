@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>2Do List</title>
-<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+<script src="confetti.browser.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -484,6 +484,9 @@ async function loadData() {
     state.projects = (data.projects && data.projects.length > 0) ? data.projects : getDefaultProjects();
     dataLoaded = true;
     render();
+    if (data._dataError) {
+      showToast('Your saved data could not be read and was backed up. Starting from an empty list.', 'error');
+    }
   } catch (e) {
     console.error('Load error:', e);
     state.projects = getDefaultProjects();
@@ -507,13 +510,15 @@ async function saveData() {
     return;
   }
   try {
-    await fetch('/api/save-data', {
+    const res = await fetch('/api/save-data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(state)
     });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
   } catch (e) {
     console.error('Save error:', e);
+    showToast('Could not save your changes. Check the app and try again.', 'error');
   }
 }
 
@@ -994,6 +999,7 @@ function renderTasks() {
       const id = el.closest('.task-item').dataset.id;
       const t = state.todos.find(x => x.id === id);
       if (t) {
+        let justCompleted = false;
         if (!t.completed) {
           if (t.subtasks && t.subtasks.length > 0 && !t.subtasks.every(s => s.done)) {
             const done = t.subtasks.filter(s => s.done).length;
@@ -1004,7 +1010,7 @@ function renderTasks() {
           t.completed = true;
           t.completedAt = new Date().toISOString();
           if (timeSpent && !isNaN(timeSpent)) t.timeSpent = parseInt(timeSpent);
-          fireConfetti();
+          justCompleted = true;
         } else {
           t.completed = false;
           delete t.completedAt;
@@ -1012,6 +1018,7 @@ function renderTasks() {
         }
         saveData();
         render();
+        if (justCompleted) fireConfetti();
       }
     });
   });
@@ -1057,9 +1064,9 @@ function renderTasks() {
         t.completed = true;
         t.completedAt = new Date().toISOString();
         if (timeSpent && !isNaN(timeSpent)) t.timeSpent = parseInt(timeSpent);
-        fireConfetti();
         saveData();
         render();
+        fireConfetti();
       });
     });
     container.querySelectorAll('.timeline-project-toggle').forEach(header => {
@@ -1097,6 +1104,7 @@ function renderTasks() {
 }
 
 function fireConfetti() {
+  if (typeof confetti !== 'function') return;
   confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
 }
 
@@ -1330,9 +1338,9 @@ function renderSubtasks() {
       const idx = parseInt(cb.dataset.subtask);
       task.subtasks[idx].done = !task.subtasks[idx].done;
       const allDone = task.subtasks.every(s => s.done);
-      if (allDone && task.subtasks.length > 0) fireConfetti();
       saveData();
       renderSubtasks();
+      if (allDone && task.subtasks.length > 0) fireConfetti();
     });
   });
 
