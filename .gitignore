@@ -26,5 +26,6 @@ node_modules/
 package-lock.json
 
 # Claude Code / Agents
-.claude/
+# CLAUDE.md, .mcp.json and .claude/settings.json are committed on purpose (shared workflow config)
+.claude/settings.local.json
 .agents/
