@@ -4,6 +4,7 @@ Reviewed: 2026-07-08, commit `1a67907`. Scope: `app.py`, `public/index.html`, `a
 
 **Progress:** Slice 0 (B1, B10, B4, B5) done on branch `slice-0-data-safety`.
 Slice 1 (B2, B6, B7, B8, B9, B11, B12, B13) done on branch `slice-1-correctness`.
+Slice 2 (B3, B16, B17, B18, B19) done on branch `slice-2-robustness`.
 
 Severity: **Critical** (data loss or broken core flow), **High** (wrong behavior users will hit), **Medium** (wrong in edge cases), **Low** (polish, hardening).
 
@@ -19,7 +20,7 @@ Fix: vendor `confetti.browser.min.js` into `public/`, wrap the call in `if (type
 Task titles (`index.html:896, 925`), project names (`536, 625, 866`), subtask text (`1322`), link labels and urls (`1363-1364`), and stats project names (`763`) are interpolated into template strings without escaping. A title containing `<` breaks rendering; `<img src=x onerror=...>` executes script inside the app. Local-only, so low exploitability, but it corrupts display with ordinary input like `a < b`.
 Fix: add one `escapeHtml()` helper and use it at every interpolation of user-entered text.
 
-### B3. High: second launch silently attaches to the first instance
+### B3. High: second launch silently attaches to the first instance [DONE, slice 2]
 `app.py:5, 71-75`. The port is fixed at 1000 and the bind error from a second instance dies inside the daemon thread unnoticed. The second window then loads the first instance's server. Two windows now each POST the whole state, so the last saver wins and the other window's edits are silently destroyed. Closing the first instance leaves the second window with a dead backend.
 Fix: detect the failed bind and either focus/exit with a message ("already running"), or pick a free port (`port=0`, read the assigned port, pass it to `QUrl`).
 
@@ -71,17 +72,17 @@ Fix: set `projectId = null` on affected tasks when the project is deleted.
 `index.html:304, 1244-1248`. `showPicker()` is called on a `display:none` input; Chromium throws NotSupportedError for non-rendered elements in several versions, and the `click()` fallback does nothing on a hidden input. Needs a quick manual test in the QWebEngine build.
 Fix if it reproduces: make the input visually hidden (1x1, opacity 0) instead of `display:none`.
 
-### B16. Low: cross-origin pages can write to the data API
+### B16. Low: cross-origin pages can write to the data API [DONE, slice 2]
 `app.py:37-66`. A malicious page in any local browser can `fetch('http://localhost:1000/api/save-data', {method:'POST', headers:{'Content-Type':'text/plain'}, body: json})`. `text/plain` avoids the CORS preflight and the server parses the body regardless of content type, so tasks can be overwritten by a drive-by page.
 Fix: reject requests whose `Origin`/`Host` isn't `localhost:1000`, or require a random token generated at startup and embedded in the page.
 
-### B17. Low: portability details in app.py
+### B17. Low: portability details in app.py [DONE, slice 2 (%APPDATA%; port now dynamic)]
 `app.py:5, 8`. Port 1000 is in the privileged range on macOS/Linux, and the data dir hardcodes `AppData/Roaming` via `Path.home()` instead of `%APPDATA%`. Windows-only today, but cheap to fix while touching B3.
 
-### B18. Low: single-threaded server
+### B18. Low: single-threaded server [DONE, slice 2]
 `app.py:72`. `socketserver.TCPServer` handles one request at a time; a slow request stalls the UI's fetches. Swap in `http.server.ThreadingHTTPServer` (one-line change).
 
-### B19. Chore: dead code
+### B19. Chore: dead code [DONE, slice 2]
 `index.html:1019` binds click handlers for `.timeline-item, .gantt-bar`, selectors that no longer exist. Remove.
 
 ---
@@ -122,7 +123,7 @@ Vendor confetti locally, reorder save-before-effects, toast on save failure, cor
 **Slice 1, correctness: B2, B6, B7, B8, B9, B11, B12, B13. [DONE]**
 Escaping helper, ISO week fix, today-badge fix, modal consistency, input validation.
 
-**Slice 2, robustness: B3, B16, B17, B18, B19.**
+**Slice 2, robustness: B3, B16, B17, B18, B19. [DONE]**
 Single-instance handling with dynamic port, origin check on the API, ThreadingHTTPServer, `%APPDATA%`, dead-code removal. All in `app.py` plus one `QUrl` line.
 
 **Slice 3, structure: R1, R3, R4.**

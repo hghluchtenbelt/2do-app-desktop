@@ -10,7 +10,7 @@ Windows desktop to-do app: a local Python HTTP server serving a single-page vani
 
 ## Architecture
 
-- `app.py`: `http.server` on `localhost:1000` with two JSON endpoints (`GET /api/load-data`, `POST /api/save-data`) plus static files from `public/`. The PyQt6 window is just a Chromium view pointed at that URL. When PyInstaller-frozen, assets resolve via `sys._MEIPASS`.
+- `app.py`: a `ThreadingHTTPServer` on `localhost` with an OS-assigned free port, exposing two JSON endpoints (`GET /api/load-data`, `POST /api/save-data`) plus static files from `public/`. The PyQt6 window is a Chromium view pointed at that URL. Single-instance is enforced by binding a fixed loopback lock port (49731); a second launch pokes it so the running window focuses, then exits. The data API rejects cross-origin/foreign-host requests. When PyInstaller-frozen, assets resolve via `sys._MEIPASS`.
 - `public/index.html`: the entire UI in one file (HTML, CSS and JS), no frameworks, no build step.
 - Data: `%APPDATA%\2do-app\data\todos.json`, shape `{"todos": [...], "projects": [...]}`. Every save POSTs the whole state; the server writes atomically (temp file, then `os.replace`).
 
@@ -28,6 +28,5 @@ There is no test suite. Verify changes by running `python app.py` and exercising
 
 ## Known quirks
 
-- Fixed port 1000. A second launched instance fails to bind silently and its window attaches to the first instance's server.
-- Confetti loads from a CDN, so `confetti` is undefined when offline.
-- `CODE_REVIEW.md` holds the current bug and feature backlog with priorities.
+- Single-instance lock is a fixed loopback port (49731). If something else holds it, the app thinks it is already running.
+- `CODE_REVIEW.md` holds the current bug and feature backlog with priorities and per-item [DONE] markers.

@@ -1041,7 +1041,7 @@ function renderTasks() {
     });
   });
 
-  container.querySelectorAll('.task-item, .timeline-item, .gantt-bar').forEach(item => {
+  container.querySelectorAll('.task-item').forEach(item => {
     item.addEventListener('click', (e) => {
       if (e.target.classList.contains('task-delete-btn')) return;
       openTaskModal(item.dataset.id);
