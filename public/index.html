@@ -19,6 +19,11 @@
   <div class="sidebar-content" id="projectList"></div>
   <div class="sidebar-footer">
     <button class="btn-small" id="newProjectBtn">+ New</button>
+    <div style="display:flex; gap:6px;">
+      <button class="btn-small" id="exportBtn" style="flex:1; margin-bottom:0;">⬇ Export</button>
+      <button class="btn-small" id="importBtn" style="flex:1; margin-bottom:0;">⬆ Import</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none;" />
   </div>
 </aside>
 
@@ -121,6 +126,16 @@
     <div class="modal-field">
       <label>Due Date</label>
       <input id="taskDateEdit" type="date" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px;" />
+    </div>
+
+    <div class="modal-field">
+      <label>Repeat</label>
+      <select id="taskRepeat" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; cursor: pointer;">
+        <option value="none">Does not repeat</option>
+        <option value="daily">🔁 Daily</option>
+        <option value="weekly">🔁 Weekly</option>
+        <option value="monthly">🔁 Monthly</option>
+      </select>
     </div>
 
     <div class="modal-field">

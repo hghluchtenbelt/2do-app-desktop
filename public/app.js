@@ -1,4 +1,4 @@
-const state = { todos: [], projects: [] };
+const state = { todos: [], projects: [], settings: {} };
 let sidebarOpen = false;
 let selectedProjectId = null;
 let newProjectIcon = '🌱';
@@ -120,29 +120,56 @@ function isoWeekMonday(date) {
   return d;
 }
 
+function normalizeTodo(t) {
+  return {
+    ...t,
+    priority: t.priority || 'normal',
+    dueDate: t.dueDate || null,
+    projectId: t.projectId || null,
+    completed: t.completed || false,
+    subtasks: t.subtasks || [],
+    links: t.links || [],
+    notes: t.notes || '',
+    repeat: t.repeat || 'none'
+  };
+}
+
+function getDefaultSettings() {
+  return { autoCleanupDays: 0 };
+}
+
+// Remove completed tasks whose completion is older than the configured window.
+function applyAutoCleanup() {
+  const days = (state.settings && state.settings.autoCleanupDays) || 0;
+  if (!days) return 0;
+  const cutoff = Date.now() - days * 86400000;
+  const before = state.todos.length;
+  state.todos = state.todos.filter(t => {
+    if (!t.completed) return true;
+    const done = t.completedAt ? new Date(t.completedAt).getTime() : 0;
+    return !(done && done < cutoff);
+  });
+  return before - state.todos.length;
+}
+
 async function loadData() {
   try {
     const res = await fetch('/api/load-data');
     const data = await res.json();
-    state.todos = (data.todos || []).map(t => ({
-      ...t,
-      priority: t.priority || 'normal',
-      dueDate: t.dueDate || null,
-      projectId: t.projectId || null,
-      completed: t.completed || false,
-      subtasks: t.subtasks || [],
-      links: t.links || [],
-      notes: t.notes || ''
-    }));
+    state.todos = (data.todos || []).map(normalizeTodo);
     state.projects = (data.projects && data.projects.length > 0) ? data.projects : getDefaultProjects();
+    state.settings = Object.assign(getDefaultSettings(), data.settings || {});
     dataLoaded = true;
+    const removed = applyAutoCleanup();
     render();
+    if (removed > 0) saveData();
     if (data._dataError) {
       showToast('Your saved data could not be read and was backed up. Starting from an empty list.', 'error');
     }
   } catch (e) {
     console.error('Load error:', e);
     state.projects = getDefaultProjects();
+    state.settings = getDefaultSettings();
     dataLoaded = true;
     render();
   }
@@ -154,6 +181,33 @@ function getDefaultProjects() {
     { id: 'proj_' + uid(), name: 'Overig', icon: '📌', color: '#8b5cf6', archived: false },
     { id: 'proj_' + uid(), name: 'Example Project', icon: '🌱', color: '#10b981', archived: false }
   ];
+}
+
+function nextRecurDate(dateStr, repeat) {
+  const base = dateStr ? new Date(dateStr + 'T00:00') : new Date();
+  if (repeat === 'daily') base.setDate(base.getDate() + 1);
+  else if (repeat === 'weekly') base.setDate(base.getDate() + 7);
+  else if (repeat === 'monthly') base.setMonth(base.getMonth() + 1);
+  else return dateStr || null;
+  return base.getFullYear() + '-' + String(base.getMonth() + 1).padStart(2, '0') + '-' + String(base.getDate()).padStart(2, '0');
+}
+
+// When a repeating task is completed, queue its next occurrence.
+function spawnRecurrence(task) {
+  if (!task.repeat || task.repeat === 'none') return;
+  state.todos.push({
+    id: uid(),
+    title: task.title,
+    priority: task.priority || 'normal',
+    dueDate: nextRecurDate(task.dueDate, task.repeat),
+    projectId: task.projectId || null,
+    completed: false,
+    createdAt: new Date().toISOString(),
+    notes: task.notes || '',
+    links: (task.links || []).map(l => ({ ...l })),
+    subtasks: (task.subtasks || []).map(s => ({ text: s.text, done: false })),
+    repeat: task.repeat
+  });
 }
 
 let dataLoaded = false;
@@ -654,6 +708,7 @@ function renderTasks() {
               ${isOverdue ? '<span class="badge urgent-badge">OVERDUE</span>' : (isUrgent ? '<span class="badge urgent-badge urgent-soon">SOON</span>' : '')}
               ${t.priority !== 'normal' ? `<span class="badge">${t.priority}</span>` : ''}
               ${t.dueDate ? `<span class="badge">${dueText}</span>` : ''}
+              ${t.repeat && t.repeat !== 'none' ? `<span class="badge" style="background:#e0e7ff; color:#4f46e5;">🔁 ${t.repeat}</span>` : ''}
               ${t.subtasks && t.subtasks.length > 0 ? `<span class="badge" style="background: #fef3c7; color: #92400e;">✓ ${t.subtasks.filter(s => s.done).length}/${t.subtasks.length}</span>` : ''}
             </div>
           </div>
@@ -732,6 +787,7 @@ function renderTasks() {
           t.completedAt = new Date().toISOString();
           const mins = parseInt(timeSpent, 10);
           if (Number.isFinite(mins) && mins > 0 && mins < 1440) t.timeSpent = mins;
+          spawnRecurrence(t);
           justCompleted = true;
         } else {
           t.completed = false;
@@ -786,6 +842,7 @@ function renderTasks() {
         t.completedAt = new Date().toISOString();
         const mins = parseInt(timeSpent, 10);
         if (Number.isFinite(mins) && mins > 0 && mins < 1440) t.timeSpent = mins;
+        spawnRecurrence(t);
         saveData();
         render();
         fireConfetti();
@@ -822,6 +879,23 @@ function renderTasks() {
       }
     });
     container.appendChild(clearBtn);
+
+    const cleanupWrap = document.createElement('div');
+    cleanupWrap.style.cssText = 'margin-top: 16px; font-size: 13px; color: var(--text-light); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;';
+    const currentDays = (state.settings && state.settings.autoCleanupDays) || 0;
+    cleanupWrap.innerHTML = 'Auto-delete completed tasks after '
+      + '<select id="autoCleanupSelect" style="padding: 6px 8px; border: 1px solid #e5e7eb; border-radius: 6px; cursor: pointer;">'
+      + [0, 30, 60, 90].map(d => `<option value="${d}" ${d === currentDays ? 'selected' : ''}>${d === 0 ? 'Never' : d + ' days'}</option>`).join('')
+      + '</select>';
+    container.appendChild(cleanupWrap);
+    document.getElementById('autoCleanupSelect').addEventListener('change', (e) => {
+      state.settings = state.settings || getDefaultSettings();
+      state.settings.autoCleanupDays = parseInt(e.target.value, 10) || 0;
+      const removed = applyAutoCleanup();
+      saveData();
+      render();
+      if (removed > 0) showToast(`Removed ${removed} old completed task${removed !== 1 ? 's' : ''}`, 'success');
+    });
   }
 }
 
@@ -1034,6 +1108,7 @@ function openTaskModal(taskId) {
   document.getElementById('taskTitle').value = task.title;
   document.getElementById('taskNotes').value = task.notes || '';
   document.getElementById('taskDateEdit').value = task.dueDate || '';
+  document.getElementById('taskRepeat').value = task.repeat || 'none';
 
   document.querySelectorAll('.priority-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.priority === editingPriority);
@@ -1182,6 +1257,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   task.title = newTitle;
   task.notes = document.getElementById('taskNotes').value.trim();
   task.dueDate = document.getElementById('taskDateEdit').value || null;
+  task.repeat = document.getElementById('taskRepeat').value || 'none';
   task.projectId = document.getElementById('taskProject').value || null;
   task.priority = editingPriority || 'normal';
 
@@ -1219,6 +1295,43 @@ searchClear.addEventListener('click', () => {
   searchClear.style.display = 'none';
   renderTasks();
   searchInput.focus();
+});
+
+// F2: export / import the whole data file
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '2do-backup-' + todayStr() + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!Array.isArray(data.todos) || !Array.isArray(data.projects)) throw new Error('bad shape');
+      if (!confirm('Replace all current tasks and projects with the imported file?')) { e.target.value = ''; return; }
+      state.todos = data.todos.map(normalizeTodo);
+      state.projects = data.projects;
+      state.settings = Object.assign(getDefaultSettings(), data.settings || {});
+      saveData();
+      render();
+      showToast('Import successful', 'success');
+    } catch (err) {
+      showToast('Import failed: not a valid 2Do backup', 'error');
+    } finally {
+      e.target.value = '';
+    }
+  };
+  reader.readAsText(file);
 });
 
 // F3: open a link's URL or file path through the OS default handler

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, os, json, time, socket, threading
+import sys, os, json, time, socket, shutil, threading
 import http.server
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -62,7 +62,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return
             try:
                 if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
-                    with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                    # utf-8-sig tolerates a BOM (e.g. if hand-edited in Notepad).
+                    with open(DATA_FILE, 'r', encoding='utf-8-sig') as f:
                         data = json.load(f)
                 else:
                     data = {'todos': [], 'projects': []}
@@ -110,6 +111,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     raise ValueError("Payload must contain 'todos' and 'projects' lists")
 
                 os.makedirs(DATA_DIR, exist_ok=True)
+                # Snapshot the last-good file before overwriting (one per day, keep 7).
+                write_daily_backup()
                 # Atomic write: write to temp file then rename
                 tmp_file = DATA_FILE + '.tmp'
                 with open(tmp_file, 'w', encoding='utf-8') as f:
@@ -124,6 +127,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
+
+
+def write_daily_backup(keep=7):
+    """Keep one snapshot of todos.json per day under DATA_DIR/backups, pruning
+    to the newest `keep` days. Cheap insurance against a bad save or edit."""
+    try:
+        if not (os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0):
+            return
+        backup_dir = os.path.join(DATA_DIR, 'backups')
+        os.makedirs(backup_dir, exist_ok=True)
+        dest = os.path.join(backup_dir, 'todos-' + time.strftime('%Y-%m-%d') + '.json')
+        if not os.path.exists(dest):
+            shutil.copy2(DATA_FILE, dest)
+        backups = sorted(f for f in os.listdir(backup_dir)
+                         if f.startswith('todos-') and f.endswith('.json'))
+        for old in backups[:-keep]:
+            try:
+                os.remove(os.path.join(backup_dir, old))
+            except OSError:
+                pass
+    except Exception as e:
+        print(f"Backup error: {e}", file=sys.stderr)
 
 
 def open_target(target):
@@ -185,9 +210,9 @@ def main():
     time.sleep(0.3)
 
     try:
-        from PyQt6.QtWidgets import QApplication, QMainWindow
+        from PyQt6.QtWidgets import QApplication, QMainWindow, QSystemTrayIcon, QMenu
         from PyQt6.QtWebEngineWidgets import QWebEngineView
-        from PyQt6.QtCore import QUrl, QObject, pyqtSignal, Qt
+        from PyQt6.QtCore import QUrl, QObject, pyqtSignal, QSettings, QTimer
         from PyQt6.QtGui import QIcon
     except ImportError:
         import webbrowser
@@ -195,35 +220,101 @@ def main():
         while True:
             time.sleep(1)
 
-    app = QApplication(sys.argv)
-    window = QMainWindow()
-    window.setWindowTitle('2Do List')
-    window.setGeometry(100, 100, 1000, 800)
+    class MainWindow(QMainWindow):
+        tray = None
 
+        def changeEvent(self, event):
+            # F6: minimizing hides the window to the tray when a tray exists.
+            if event.type() == event.Type.WindowStateChange and self.isMinimized() and self.tray:
+                event.ignore()
+                self.hide()
+                return
+            super().changeEvent(event)
+
+    app = QApplication(sys.argv)
+    # A QIcon that loads a file must be created after QApplication exists.
     icon_path = os.path.join(BASE_DIR, 'public', 'icon.ico')
-    if os.path.exists(icon_path):
-        window.setWindowIcon(QIcon(icon_path))
+    icon = QIcon(icon_path) if os.path.exists(icon_path) else QIcon()
+    window = MainWindow()
+    window.setWindowTitle('2Do List')
+    if not icon.isNull():
+        window.setWindowIcon(icon)
+
+    # F10: restore the last window geometry, persist it on quit.
+    qsettings = QSettings('2do-app', '2Do List')
+    geo = qsettings.value('geometry')
+    if geo is not None:
+        try:
+            window.restoreGeometry(geo)
+        except Exception:
+            window.setGeometry(100, 100, 1000, 800)
+    else:
+        window.setGeometry(100, 100, 1000, 800)
+    app.aboutToQuit.connect(lambda: qsettings.setValue('geometry', window.saveGeometry()))
 
     browser = QWebEngineView()
     browser.load(QUrl(f'http://localhost:{port}'))
     window.setCentralWidget(browser)
     window.show()
 
+    def surface():
+        window.showNormal()
+        window.raise_()
+        window.activateWindow()
+
+    # F6: system tray icon with quick actions and due-task notifications.
+    tray = None
+    try:
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            tray = QSystemTrayIcon(icon, app)
+            tray.setToolTip('2Do List')
+            menu = QMenu()
+            menu.addAction('Show').triggered.connect(surface)
+            menu.addAction('Quit').triggered.connect(app.quit)
+            tray.setContextMenu(menu)
+            tray.activated.connect(
+                lambda reason: surface() if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
+            tray.show()
+            window.tray = tray
+    except Exception as e:
+        print(f"Tray error: {e}", file=sys.stderr)
+
+    notified = set()
+
+    def check_due():
+        if tray is None:
+            return
+        try:
+            if not (os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0):
+                return
+            with open(DATA_FILE, encoding='utf-8') as f:
+                todos = json.load(f).get('todos', [])
+            today = time.strftime('%Y-%m-%d')
+            due = [t for t in todos
+                   if not t.get('completed') and t.get('dueDate') and t['dueDate'] <= today
+                   and t.get('id') not in notified]
+            for t in due:
+                notified.add(t.get('id'))
+            if due:
+                titles = ', '.join(t.get('title', '(untitled)') for t in due[:3])
+                more = '' if len(due) <= 3 else f' +{len(due) - 3} more'
+                tray.showMessage('2Do: tasks due', titles + more,
+                                 QSystemTrayIcon.MessageIcon.Information, 8000)
+        except Exception as e:
+            print(f"Due-check error: {e}", file=sys.stderr)
+
+    due_timer = QTimer()
+    if tray is not None:
+        due_timer.timeout.connect(check_due)
+        due_timer.start(60000)
+        QTimer.singleShot(3000, check_due)
+
     # When a second launch pokes the lock port, raise this window to the front.
     class Focuser(QObject):
         ping = pyqtSignal()
 
     focuser = Focuser()
-
-    def on_ping():
-        try:
-            window.setWindowState((window.windowState() & ~Qt.WindowState.WindowMinimized) | Qt.WindowState.WindowActive)
-            window.raise_()
-            window.activateWindow()
-        except Exception:
-            pass
-
-    focuser.ping.connect(on_ping)
+    focuser.ping.connect(surface)
 
     def listen_for_pokes():
         while True:
