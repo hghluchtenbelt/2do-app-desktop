@@ -6,6 +6,7 @@ Reviewed: 2026-07-08, commit `1a67907`. Scope: `app.py`, `public/index.html`, `a
 Slice 1 (B2, B6, B7, B8, B9, B11, B12, B13) done on branch `slice-1-correctness`.
 Slice 2 (B3, B16, B17, B18, B19) done on branch `slice-2-robustness`.
 Slice 3 (R1 file split, R4 debounce) done on branch `slice-3-structure`. R3 (event delegation) intentionally deferred: high-churn rewrite of all event binding with no user-visible benefit and real regression risk at this app's scale; revisit only if render-time listener churn becomes a measured problem.
+Slice 4 (F1 search, F4 project archive, F3 clickable links, F9 shortcuts) done on branch `slice-4-features`.
 
 Severity: **Critical** (data loss or broken core flow), **High** (wrong behavior users will hit), **Medium** (wrong in edge cases), **Low** (polish, hardening).
 
@@ -90,15 +91,15 @@ Fix: reject requests whose `Origin`/`Host` isn't `localhost:1000`, or require a 
 
 ## 2. Features (feat), roughly by value/effort
 
-1. **F1 Search and filter.** A text box above the task list filtering title/notes/subtasks live. Highest daily value, small effort.
+1. **F1 Search and filter. [DONE, slice 4]** A text box above the task list filtering title/notes/subtasks live. Highest daily value, small effort.
 2. **F2 Backup and export/import.** "Export JSON" / "Import JSON" buttons plus server-side rotating backups (keep last N copies of `todos.json` on save, e.g. daily). Pairs with B4.
-3. **F3 Clickable links.** Links on a task are currently plain text. URLs should open in the default browser and file paths via a new `POST /api/open` endpoint using `os.startfile()` (QWebEngine won't open external apps or `file://` well on its own).
-4. **F4 Project archive UI.** The data model already has `archived` on projects and every filter respects it, but there is no way to set it. Add "Archive" to the project edit modal, plus an "archived projects" section to restore from.
+3. **F3 Clickable links. [DONE, slice 4]** Links on a task are currently plain text. URLs open in the default browser and file paths via a new `POST /api/open` endpoint using `os.startfile()` (QWebEngine won't open external apps or `file://` well on its own).
+4. **F4 Project archive UI. [DONE, slice 4]** The data model already has `archived` on projects and every filter respects it, but there was no way to set it. Added "Archive/Unarchive" to the project edit modal, plus a collapsible "Archived" section in the sidebar to restore from.
 5. **F5 Dark mode.** CSS variables are already in `:root`; add a toggle persisted in the data file and a dark variable set. Note many colors are hardcoded gradients outside the variables, so budget cleanup time.
 6. **F6 Due-date notifications and tray.** QSystemTrayIcon with minimize-to-tray and a Windows toast when tasks become due/overdue. Makes due dates actionable instead of decorative.
 7. **F7 Recurring tasks.** `repeat: daily|weekly|monthly` on a task; completing it spawns the next occurrence.
 8. **F8 Manual task ordering.** Drag to reorder within a section (projects already have this pattern to copy).
-9. **F9 Keyboard shortcuts.** `n` focus new task, `/` focus search, `1..4` switch tabs, `Esc` close modal.
+9. **F9 Keyboard shortcuts. [DONE, slice 4]** `n` focus new task, `/` focus search, `1..4` switch tabs, `Esc` close modal.
 10. **F10 Window state persistence.** Remember size/position via QSettings (`app.py`).
 11. **F11 Bulk actions.** Multi-select tasks to move project, set date, or delete.
 12. **F12 Archive auto-cleanup.** Setting to purge completed tasks older than N days.
@@ -130,7 +131,7 @@ Single-instance handling with dynamic port, origin check on the API, ThreadingHT
 **Slice 3, structure: R1, R4 [DONE]; R3 deferred.**
 File split and save debounce, before features pile onto the monolith.
 
-**Slice 4, quick-win features: F1 search, F4 project archive, F3 clickable links, F9 shortcuts.**
+**Slice 4, quick-win features: F1 search, F4 project archive, F3 clickable links, F9 shortcuts. [DONE]**
 
 **Slice 5, bigger features (pick per need): F2 backups, F5 dark mode, F6 tray/notifications, F7 recurring, F8 ordering, F10-F12.**
 

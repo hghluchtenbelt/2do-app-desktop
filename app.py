@@ -76,6 +76,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
+        if self.path == '/api/open':
+            if not self._api_allowed():
+                self.send_error(403, 'Forbidden')
+                return
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            try:
+                target = json.loads(body.decode()).get('target')
+                if not isinstance(target, str) or not target.strip():
+                    raise ValueError("Missing target")
+                open_target(target.strip())
+                self._send_json(200, b'{"success":true}')
+            except Exception as e:
+                self._send_json(400, json.dumps({"success": False, "error": str(e)}).encode())
+            return
+
         if self.path == '/api/save-data':
             if not self._api_allowed():
                 self.send_error(403, 'Forbidden')
@@ -108,6 +124,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
+
+
+def open_target(target):
+    """Open a URL in the default browser, or a file/folder with its default app."""
+    if target.lower().startswith(('http://', 'https://', 'mailto:')):
+        import webbrowser
+        webbrowser.open(target)
+    elif sys.platform.startswith('win'):
+        os.startfile(target)  # noqa: only exists on Windows
+    elif sys.platform == 'darwin':
+        import subprocess
+        subprocess.Popen(['open', target])
+    else:
+        import subprocess
+        subprocess.Popen(['xdg-open', target])
 
 
 def acquire_single_instance():

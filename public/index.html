@@ -41,6 +41,8 @@
       <div class="color-picker" id="colorPicker"></div>
     </div>
 
+    <button id="archiveProjectBtn" class="modal-cancel" style="width:100%; display:none; margin-bottom:12px; background:#fef3c7; color:#92400e;">Archive project</button>
+
     <div class="modal-actions">
       <button class="modal-cancel" id="cancelProjectBtn">Cancel</button>
       <button class="modal-submit" id="saveProjectBtn">Create</button>
@@ -53,6 +55,11 @@
     <div class="topbar">
       <button class="menu-btn" id="menuBtn">☰</button>
       <h1 style="font-size: 20px; font-weight: 600;">2Do List</h1>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input id="searchInput" type="text" placeholder="Search tasks..." autocomplete="off" />
+        <button id="searchClear" class="search-clear" title="Clear search" style="display:none;">✕</button>
+      </div>
     </div>
 
     <div class="tabs">

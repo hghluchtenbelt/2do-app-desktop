@@ -8,6 +8,8 @@ let expandedTaskId = null;
 let editingProjectId = null;
 let editingPriority = null;
 let expandedTimelineProjects = new Set();
+let searchQuery = '';
+let showArchivedProjects = false;
 
 const ICONS = [
   // Nature / Climate / Weather
@@ -225,12 +227,44 @@ function renderProjects() {
     </div>`;
   });
 
+  const archived = state.projects.filter(p => p.archived);
+  if (archived.length > 0) {
+    html += `<div class="project-section-header" id="archivedToggle">${showArchivedProjects ? '▼' : '▶'} Archived (${archived.length})</div>`;
+    if (showArchivedProjects) {
+      archived.forEach(p => {
+        const count = state.todos.filter(t => t.projectId === p.id && !t.completed).length;
+        html += `<div class="project-item archived" data-id="${p.id}">
+          <span class="project-dot" style="background:${p.color};"></span>
+          <span class="project-label">${p.icon} ${escapeHtml(p.name)}</span>
+          <span class="project-count">${count}</span>
+          <button class="project-restore" data-restore-proj-id="${p.id}" title="Restore project">↩</button>
+        </div>`;
+      });
+    }
+  }
+
   list.innerHTML = html;
   list.querySelectorAll('.project-item').forEach(el => {
     el.addEventListener('click', (e) => {
-      if (e.target.classList.contains('project-delete') || e.target.classList.contains('project-edit') || e.target.classList.contains('proj-drag-handle')) return;
+      if (e.target.classList.contains('project-delete') || e.target.classList.contains('project-edit') || e.target.classList.contains('proj-drag-handle') || e.target.classList.contains('project-restore')) return;
       selectedProjectId = el.dataset.id || null;
       render();
+    });
+  });
+
+  const archivedToggle = document.getElementById('archivedToggle');
+  if (archivedToggle) {
+    archivedToggle.addEventListener('click', () => {
+      showArchivedProjects = !showArchivedProjects;
+      renderProjects();
+    });
+  }
+
+  list.querySelectorAll('.project-restore').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const proj = state.projects.find(p => p.id === btn.dataset.restoreProjId);
+      if (proj) { proj.archived = false; saveData(); render(); }
     });
   });
 
@@ -246,6 +280,9 @@ function renderProjects() {
       document.getElementById('projectName').value = proj.name;
       document.getElementById('projectModalTitle').textContent = 'Edit Project';
       document.getElementById('saveProjectBtn').textContent = 'Save';
+      const archiveBtn = document.getElementById('archiveProjectBtn');
+      archiveBtn.style.display = '';
+      archiveBtn.textContent = proj.archived ? 'Unarchive project' : 'Archive project';
       setupProjectModal();
       document.getElementById('projectModal').classList.add('open');
     });
@@ -471,6 +508,15 @@ function renderTasks() {
     todos = state.todos.filter(t => t.completed);
   }
 
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    todos = todos.filter(t =>
+      (t.title || '').toLowerCase().includes(q) ||
+      (t.notes || '').toLowerCase().includes(q) ||
+      (t.subtasks || []).some(s => (s.text || '').toLowerCase().includes(q))
+    );
+  }
+
   document.getElementById('activeCount').textContent = state.todos.filter(t => !t.completed).length;
   document.getElementById('timelineCount').textContent = state.todos.filter(t => t.dueDate && !t.completed).length;
   document.getElementById('archiveCount').textContent = state.todos.filter(t => t.completed).length;
@@ -481,7 +527,9 @@ function renderTasks() {
   }
 
   if (todos.length === 0) {
-    container.innerHTML = '<div class="empty">No tasks here yet</div>';
+    container.innerHTML = searchQuery
+      ? `<div class="empty">No tasks match "${escapeHtml(searchQuery)}"</div>`
+      : '<div class="empty">No tasks here yet</div>';
     return;
   }
 
@@ -837,8 +885,21 @@ document.getElementById('newProjectBtn').addEventListener('click', () => {
   document.getElementById('projectName').value = '';
   document.getElementById('projectModalTitle').textContent = 'Create Project';
   document.getElementById('saveProjectBtn').textContent = 'Create';
+  document.getElementById('archiveProjectBtn').style.display = 'none';
   setupProjectModal();
   document.getElementById('projectModal').classList.add('open');
+});
+
+document.getElementById('archiveProjectBtn').addEventListener('click', () => {
+  const proj = state.projects.find(p => p.id === editingProjectId);
+  if (proj) {
+    proj.archived = !proj.archived;
+    if (proj.archived && selectedProjectId === proj.id) selectedProjectId = null;
+  }
+  document.getElementById('projectModal').classList.remove('open');
+  editingProjectId = null;
+  saveData();
+  render();
 });
 
 document.getElementById('cancelProjectBtn').addEventListener('click', () => {
@@ -1041,15 +1102,22 @@ function renderLinks() {
 
   let html = '';
   task.links.forEach((link, idx) => {
-    html += `<div style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center; padding: 8px; background: #f9f9f9; border-radius: 6px;">
-      <span style="flex: 1;">
+    html += `<div class="link-item">
+      <button class="link-open" data-open-link="${idx}" title="Open">
         <strong>${escapeHtml(link.label || 'Link')}</strong><br>
-        <small style="color: #666;">${escapeHtml(link.url)}</small>
-      </span>
+        <small>${escapeHtml(link.url)}</small>
+      </button>
       <button data-remove-link="${idx}" style="color: #dc2626; cursor: pointer; font-weight: 600;">×</button>
     </div>`;
   });
   list.innerHTML = html;
+
+  list.querySelectorAll('[data-open-link]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const link = task.links[parseInt(btn.dataset.openLink)];
+      if (link) openLink(link.url);
+    });
+  });
 
   list.querySelectorAll('[data-remove-link]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1135,6 +1203,56 @@ document.getElementById('deleteTaskBtn').addEventListener('click', () => {
 document.getElementById('closeTaskModal').addEventListener('click', () => {
   document.getElementById('taskModal').classList.remove('open');
   expandedTaskId = null;
+});
+
+// F1: live search
+const searchInput = document.getElementById('searchInput');
+const searchClear = document.getElementById('searchClear');
+searchInput.addEventListener('input', () => {
+  searchQuery = searchInput.value.trim();
+  searchClear.style.display = searchQuery ? '' : 'none';
+  renderTasks();
+});
+searchClear.addEventListener('click', () => {
+  searchInput.value = '';
+  searchQuery = '';
+  searchClear.style.display = 'none';
+  renderTasks();
+  searchInput.focus();
+});
+
+// F3: open a link's URL or file path through the OS default handler
+function openLink(target) {
+  if (!target) return;
+  fetch('/api/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target })
+  }).then(res => { if (!res.ok) throw new Error('open failed'); })
+    .catch(() => showToast('Could not open this link', 'error'));
+}
+
+// F9: keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const openModal = document.querySelector('.modal.open');
+    if (openModal) {
+      openModal.classList.remove('open');
+      expandedTaskId = null;
+      editingProjectId = null;
+      return;
+    }
+    if (document.activeElement === searchInput) { searchInput.blur(); return; }
+  }
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === '/') { e.preventDefault(); searchInput.focus(); }
+  else if (e.key === 'n') { e.preventDefault(); if (currentTab === 'active') document.getElementById('taskInput').focus(); }
+  else if (e.key >= '1' && e.key <= '4') {
+    const tabs = ['active', 'timeline', 'archive', 'stats'];
+    const tab = document.querySelector(`.tab[data-tab="${tabs[parseInt(e.key) - 1]}"]`);
+    if (tab) tab.click();
+  }
 });
 
 loadData();
