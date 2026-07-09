@@ -5,6 +5,7 @@ Reviewed: 2026-07-08, commit `1a67907`. Scope: `app.py`, `public/index.html`, `a
 **Progress:** Slice 0 (B1, B10, B4, B5) done on branch `slice-0-data-safety`.
 Slice 1 (B2, B6, B7, B8, B9, B11, B12, B13) done on branch `slice-1-correctness`.
 Slice 2 (B3, B16, B17, B18, B19) done on branch `slice-2-robustness`.
+Slice 3 (R1 file split, R4 debounce) done on branch `slice-3-structure`. R3 (event delegation) intentionally deferred: high-churn rewrite of all event binding with no user-visible benefit and real regression risk at this app's scale; revisit only if render-time listener churn becomes a measured problem.
 
 Severity: **Critical** (data loss or broken core flow), **High** (wrong behavior users will hit), **Medium** (wrong in edge cases), **Low** (polish, hardening).
 
@@ -106,10 +107,10 @@ Fix: reject requests whose `Origin`/`Host` isn't `localhost:1000`, or require a 
 
 ## 3. Refactors (won't change behavior)
 
-- **R1** Split `index.html` (74 KB) into `index.html` + `style.css` + `app.js`. Still no build step, just three files. Do this before the feature work; every feature touches this file.
-- **R2** One `escapeHtml()` + small `h` template helper used everywhere (lands with B2).
-- **R3** Event delegation: one listener per container instead of re-binding every button on each render.
-- **R4** Debounce `saveData()` (e.g. 300 ms) so subtask checkbox sprees don't fire a POST each.
+- **R1 [DONE, slice 3]** Split `index.html` into `index.html` + `style.css` + `app.js`. Still no build step, just three files.
+- **R2 [DONE, slice 1]** One `escapeHtml()` helper used everywhere (landed with B2).
+- **R3 [DEFERRED]** Event delegation: one listener per container instead of re-binding every button on each render. Deferred, see Progress note.
+- **R4 [DONE, slice 3]** Debounce `saveData()` (250 ms) so subtask checkbox sprees don't fire a POST each; a pending save is flushed via `sendBeacon` on page hide/close so nothing is lost.
 
 ---
 
@@ -126,8 +127,8 @@ Escaping helper, ISO week fix, today-badge fix, modal consistency, input validat
 **Slice 2, robustness: B3, B16, B17, B18, B19. [DONE]**
 Single-instance handling with dynamic port, origin check on the API, ThreadingHTTPServer, `%APPDATA%`, dead-code removal. All in `app.py` plus one `QUrl` line.
 
-**Slice 3, structure: R1, R3, R4.**
-File split and render cleanup, before features pile onto the monolith.
+**Slice 3, structure: R1, R4 [DONE]; R3 deferred.**
+File split and save debounce, before features pile onto the monolith.
 
 **Slice 4, quick-win features: F1 search, F4 project archive, F3 clickable links, F9 shortcuts.**
 

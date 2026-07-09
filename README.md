@@ -79,8 +79,13 @@ The file uses atomic writes (temp file + rename) to prevent corruption. Back up 
 ├── app.spec            # PyInstaller build config
 ├── make_icon.py        # Helper script to regenerate the app icon
 ├── public/
-│   ├── index.html      # Full UI (HTML + CSS + JS in one file)
+│   ├── index.html      # UI markup
+│   ├── style.css       # All styling
+│   ├── app.js          # All app logic
+│   ├── confetti.browser.min.js  # Vendored canvas-confetti (offline)
 │   └── icon.ico        # App icon
+├── CLAUDE.md           # Project guide for Claude Code
+├── CODE_REVIEW.md      # Bug and feature backlog
 └── README.md
 ```
 
